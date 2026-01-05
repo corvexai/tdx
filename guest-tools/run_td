@@ -79,6 +79,26 @@ def add_gpus(cmd, gpus):
         cmd.extend(gpu_cmd)
         index = index + 1
 
+def add_fs(cmd, virtiofs):
+    if len(virtiofs) <= 0:
+        print("warning, no virtiofs passed to add_fs, ignoring")
+        return
+
+    #TODO make this based on vm image name probably
+    vm_name = 'vm001'
+    source = "/scratch" #TODO use args
+
+    #TODO put this someplace better than /tmp
+    virtiofsd_cmds = ['/usr/libexec/virtiofsd', f'--socket-path=/tmp/{vm_name}-vhost-fs.sock',
+                     '--shared-dir', f'{source}' ]
+
+    fs_cmds = ['-chardev', f'socket,id=char0,path=/tmp/{vm_name}-vhost-fs.sock',
+               '-device', 'vhost-user-fs-pci,chardev=char0,tag=sharedfs']
+
+    print("Starting viriofsd: %s" % virtiofsd_cmds)
+    subprocess.Popen(virtiofsd_cmds)
+    cmd.extend(fs_cmds)
+
 def pci_devices(vendor, device, subsystem) -> list[str]:
     output = subprocess.check_output(["lspci", "-D", "-n", "-m", "-d", f"{vendor}:{device}"], stderr=subprocess.STDOUT)
     devices = []
@@ -212,6 +232,10 @@ def do_run(img_path, vcpus, mem, gpus):
         setup_ppcie(qemu_cmds)
     else:
         add_gpus(qemu_cmds, gpus)
+
+    virtiofs = "scratch"
+    if virtiofs:
+        add_fs(qemu_cmds, virtiofs)
 
     subprocess.run(qemu_cmds, stderr=subprocess.STDOUT)
     do_print()
